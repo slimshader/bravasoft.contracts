@@ -107,8 +107,16 @@ jobs:
       - name: Push to NuGet
         run: |
           set -euo pipefail
+          # dotnet nuget push does not expand globs itself, so resolve the file
+          # here rather than handing it a pattern.
+          package=$(find artifacts -maxdepth 1 -name '*.nupkg' -print -quit)
+          if [ -z "$package" ]; then
+            echo "::error::No .nupkg found in artifacts/."
+            exit 1
+          fi
+          echo "Pushing $package"
           # The matching .snupkg next to it is pushed automatically.
-          dotnet nuget push 'artifacts/*.nupkg' \
+          dotnet nuget push "$package" \
             --api-key '${{ steps.login.outputs.NUGET_API_KEY }}' \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
