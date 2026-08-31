@@ -1,205 +1,118 @@
 # Bravasoft.Contracts
 
 Types that move invariants into the type system - `NotEmptyString` in place of a `string` that
-every function has to check for itself.
-
-Both conversions are implicit, so adopting one is a signature change and nothing else: call sites
-read exactly as before, and bodies go on using the plain type. What changes is that a broken
-promise is reported where it was broken, rather than inside the function that was handed the bad
-value.
+every function has to check for itself. Both conversions are implicit, so adopting one is a
+signature change and nothing else.
 
 ## Only the signature changes
 
-Constructors are where validation piles up, so they show the difference most clearly. The usual
-version, with the checks written out:
+The usual constructor, with the checks written out:
 
 ```csharp
-public sealed class Player
+public Player(string name, List<Item> inventory)
 {
-    private readonly string _name;
-    private readonly List<Item> _inventory;
+    if (string.IsNullOrEmpty(name))
+        throw new ArgumentException("Name must not be empty.", nameof(name));
+    if (inventory is null || inventory.Count == 0)
+        throw new ArgumentException("Inventory must not be empty.", nameof(inventory));
 
-    public Player(string name, List<Item> inventory)
-    {
-        if (string.IsNullOrEmpty(name))
-            throw new ArgumentException("Name must not be empty.", nameof(name));
-        if (inventory is null || inventory.Count == 0)
-            throw new ArgumentException("Inventory must not be empty.", nameof(inventory));
-
-        _name = name;
-        _inventory = inventory;
-    }
+    _name = name;
+    _inventory = inventory;
 }
 ```
 
-The contracted version changes the parameter types and deletes the guards. Nothing else moves -
-the fields stay the plain types they already were:
+The same constructor with the requirements in its signature:
 
 ```csharp
-public sealed class Player
+private readonly string _name;                // still a plain string
+private readonly List<Item> _inventory;       // still a plain List<Item>
+
+public Player(NotEmptyString name, NotEmptyList<Item> inventory)
 {
-    private readonly string _name;                // still a plain string
-    private readonly List<Item> _inventory;       // still a plain List<Item>
-
-    public Player(NotEmptyString name, NotEmptyList<Item> inventory)
-    {
-        _name = name;                             // implicit NotEmptyString  -> string
-        _inventory = inventory;                   // implicit NotEmptyList<T> -> List<T>
-    }
-
-    public string Describe() => $"{_name} carrying {_inventory.Count}";
+    _name = name;                             // implicit NotEmptyString  -> string
+    _inventory = inventory;                   // implicit NotEmptyList<T> -> List<T>
 }
 ```
 
-No unwrapping, no `.Value`, no cast. The assignments compile because the conversion is implicit,
-which means every method, property, and field initialiser that already reads `_name` keeps
-working untouched. The contract types appear only at the boundary they guard, and the call site
-does not change either:
+No guards, no `.Value`, no casts, and the fields keep their ordinary types - so every method that
+already reads `_name` is untouched. Callers do not change either, which is where this starts to
+pay:
 
 ```csharp
-var player = new Player("Ada", items);            // exactly as before
+static Player Load(SaveData save)
+{
+    var items = new List<Item>();
+
+    if (save.Version >= 2)                        // bug: a v1 save never fills the list
+    {
+        foreach (var id in save.ItemIds)
+            items.Add(Catalogue.Find(id));
+    }
+
+    return new Player(save.Name, items);          // throws HERE, in Load, on a v1 save
+}
 ```
 
-The one place the conversion does not reach is member access: `name.Length` will not compile
-(`CS1061`), because C# does not consider user-defined conversions when it looks up a member.
-Where a body does want the value directly, reach for `.Value`:
+`items` is an ordinary `List<Item>` and is passed as one. The conversion runs at the call, so the
+empty list is caught on this line - not two frames later, inside a constructor that did nothing
+wrong.
+
+## The bug is in the caller
+
+That distinction is the whole point, and the stack traces show it. Guard clauses put the check
+inside the callee, so that is what gets accused:
+
+```
+ArgumentException: Inventory must not be empty. (Parameter 'inventory')
+   at Traditional.Player..ctor(String name, List`1 inventory)   <- accused, but blameless
+   at Traditional.Loader.Load(SaveData save)
+   at Program.Main()
+```
+
+With the contract in the signature, `Player` is never entered, so it cannot be blamed:
+
+```
+ContractViolationException: Collection of type 'List`1[Item]' must not be empty.
+   at Bravasoft.Contracts.NotEmpty`2.ThrowEmpty()
+   at Bravasoft.Contracts.NotEmpty`2..ctor(TList value)
+   at Bravasoft.Contracts.NotEmptyList`1..ctor(List`1 value)
+   at Bravasoft.Contracts.NotEmptyList`1.op_Implicit(List`1 value)
+   at Contracted.Loader.Load(SaveData save)                     <- the actual bug
+   at Program.Main()
+```
+
+The deepest frame of your own code is the line that broke the promise. Nothing is left to
+interpret.
+
+It works on return values too. `NotNull<string> LookUp(string key)` is a promise the *callee*
+makes: callers never null-check the result, and a broken promise is caught at the `return`,
+inside `LookUp`. Parameters are the caller's obligation and fail in the caller's frame; return
+values are the callee's and fail in the callee's.
+
+## Reaching the value
+
+Member access does not see through a user-defined conversion, so `name.Length` will not compile
+(`CS1061`). Use `.Value`:
 
 ```csharp
-int length = name.Value.Length;                   // or ((string)name).Length
+int length = name.Value.Length;               // or ((string)name).Length
 ```
 
 Prefer `.Value` over the cast. A cast reads as though something is being forced, which is the
 opposite of what is happening - the value has already been checked, and `.Value` simply names it.
 
-Storing the plain type is exactly what the guard-clause version does as well: once `_name` is a
-`string`, neither version records that anything was checked. These types are about the argument
-boundary - what a class then does with a value it has been handed is a separate question.
-
-## Upholding a contract is the caller's job
-
-A precondition is a promise the *caller* makes. When it is broken, the bug is in the caller: it
-computed, loaded, or forgot to check something and then passed it on. The called function is the
-victim, not the culprit.
-
-Traditional guard clauses get this backwards. The check lives inside the callee, so that is where
-the exception is raised, and that is what the stack trace accuses:
-
-```csharp
-static string Greet(string name)
-{
-    if (string.IsNullOrEmpty(name))                              // wrong place to find out
-        throw new ArgumentException("Name must not be empty.", nameof(name));
-
-    return Format.Greeting(name);
-}
-```
-
-```
-ArgumentException: Name must not be empty. (Parameter 'name')
-   at Traditional.Greet(String name)         <- accused, but blameless
-   at Program.BuggyCaller(Boolean traditional)
-   at Program.Main()
-```
-
-The top frame points at `Greet`, a function that is behaving perfectly. The real defect is one
-frame down, and every reader of that trace has to work that out for themselves - every time.
-
-Make the contract part of the signature and the check moves to where the mistake was made. The
-implicit conversion runs in the caller's frame, before control ever reaches the callee:
-
-```csharp
-static string Greet(NotEmptyString name) => Format.Greeting(name);   // no guard; there cannot be one
-```
-
-```
-ContractViolationException: Value of type 'System.String' must not be null.
-   at Bravasoft.Contracts.NotNull`1.ThrowNull()
-   at Bravasoft.Contracts.NotNull`1..ctor(T value)
-   at Bravasoft.Contracts.NotEmptyString..ctor(String value)
-   at Bravasoft.Contracts.NotEmptyString.op_Implicit(String value)
-   at Program.BuggyCaller(Boolean traditional)                       <- the actual bug
-   at Program.Main()
-```
-
-`Greet` does not appear in that trace at all, because it was never entered. The deepest frame of
-your own code is the line that broke the promise. Nothing is left to interpret.
-
-The call site is unchanged - `Greet(name)` still compiles and reads the same - and the body passes
-`name` straight on to `Format.Greeting(string)` with no cast and no unwrapping, because the
-conversion back is implicit too. What changed is who is accountable, and where you land in the
-debugger.
-
-## The contract belongs in the signature
-
-Written as a guard clause, a precondition is an implementation detail. It lives in the body, and
-the only ways to discover it are to read the source or to hit it at runtime.
-`string Greet(string name)` says nothing about null or emptiness; the requirement is real but
-invisible, so every caller either guesses, trusts a comment, or defensively checks again.
-
-`string Greet(NotEmptyString name)` states it. IntelliSense shows it, the generated XML docs carry it,
-a decompiled reference carries it, and it shows up in the diff when it changes - because it is
-part of the type, not part of the implementation.
-
-And because it is a type, it works in the other direction too. A return type is a promise the
-*callee* makes:
-
-```csharp
-NotNull<string> LookUp(string key) => ...
-```
-
-Callers never null-check the result of `LookUp`, and no comment has to tell them not to. If the
-promise is broken, the conversion runs at the `return`, inside the callee:
-
-```
-ContractViolationException: Value of type 'System.String' must not be null.
-   at Bravasoft.Contracts.NotNull`1.ThrowNull()
-   at Bravasoft.Contracts.NotNull`1..ctor(T value)
-   at Bravasoft.Contracts.NotNull`1.op_Implicit(T value)
-   at Program.LookUp(String key)                               <- the actual bug
-   at Program.InnocentCaller()
-   at Program.Main()
-```
-
-So the party at fault lands in the deepest frame either way. Parameters are the caller's
-obligation and are checked in the caller's frame; return values are the callee's obligation and
-are checked in the callee's. In both cases the code that broke the promise is the code you are
-looking at when the debugger stops.
-
-## What this buys you
-
-- **Blame lands on the party at fault.** The stack trace names the code with the bug, not its
-  first victim.
-- **The body has nothing to check.** No guard clause, no `!`, no defensive branch - the parameter
-  type already ruled the bad case out. Fewer lines, and no dead paths to test.
-- **The compiler propagates it.** Anything already holding a `NotNull<T>` can pass it along
-  without re-checking, so the check happens once, at the edge, instead of at every layer.
-- **The requirement is visible without reading the implementation**, in both directions, and it
-  cannot go stale - a comment saying "must not be null" does not compile.
-
 ## Why not nullable reference types, or `[NotNull]`?
 
-Nullable reference types are a compile-time analysis that is erased before anything runs. They
-produce warnings - not even build failures, unless you opt into that - and only where the
-analysis can see both sides of a call. Call from code that never opted in, and there is nothing
-to warn about: at runtime a `string` parameter and a `string?` parameter are the same parameter.
+Both are erased before anything runs, and both warn rather than fail.
 
-In Unity that gap is the default state. Nullable reference types are off unless you turn them on,
-and there is no project setting for it - the Editor regenerates the `.csproj` files, so the
-switch has to go in a `csc.rsp` next to the code, or as `#nullable enable` at the top of every
-file. Most projects never do either. Much of what a Unity project calls into, engine API surface
-and third-party packages alike, carries no annotations at all, so even a project that does opt in
-gets no analysis at exactly the boundaries where values arrive from elsewhere.
+In Unity that gap is the default state: nullable reference types are off, with no project setting
+to turn them on - the Editor regenerates the `.csproj` files, so the switch has to live in a
+`csc.rsp` or as `#nullable enable` per file. Engine and package APIs carry no annotations either,
+so even a project that opts in gets nothing at the boundaries where outside values arrive.
 
-A `[NotNull]` attribute, where an analyser offers one, is erased the same way, and adds a harder
-limit: it is one check. There is no `[NotEmpty]`, no `[Positive]`, no `[InRange(1, 10)]`, and you
-cannot write them - the vocabulary belongs to whoever wrote the analyser, and it stops where they
-stopped.
-
-These types check instead of warning, so the contract holds no matter who calls, whether they
-opted into anything, or what language version they compiled against. And because a contract is a
-type rather than an attribute, adding one is ordinary code: `NotEmptyString` is a hundred lines
-in this repository, over half of them documentation - not a feature request filed against
-somebody else's analyser.
+`[NotNull]` adds a harder limit: it is one check. There is no `[NotEmpty]`, no `[Positive]`, no
+`[InRange(1, 10)]`, and you cannot write them - the vocabulary belongs to whoever wrote the
+analyser. A contract expressed as a type is ordinary code you can add to.
 
 ## The types
 
@@ -211,22 +124,21 @@ somebody else's analyser.
 | `NotEmptyList<T>` | over `List<T>` | `NotEmpty<List<T>, T>` |
 | `NotEmptyArray<T>` | over `T[]` | `NotEmpty<T[], T>` |
 
-A stronger contract implies every weaker one, and converts to it implicitly, so a method taking
-`NotNull<string>` accepts a `NotEmptyString` unchanged. Widening re-tests nothing.
+A stronger contract converts implicitly to every weaker one, so a method taking `NotNull<string>`
+accepts a `NotEmptyString` unchanged. Widening re-tests nothing.
 
 ## Cost
 
-Each type is a `readonly struct` holding a single reference, so it is exactly the size of the
-thing it wraps and allocates nothing. The check happens once, on the way in; the throw lives in a
-separate non-inlined method so what remains on the hot path is a never-taken branch.
+Each type is a `readonly struct` holding a single reference: the size of the thing it wraps, and
+no allocation. The check happens once, on the way in, and the throw sits in a separate non-inlined
+method, so what is left on the hot path is a never-taken branch.
 
-## The one hole
+## The `default` hole
 
-C# has no way to intercept `default(SomeStruct)` - no parameterless constructor runs for
-`default(T)`, array elements, or uninitialized fields, and `record struct` does not change that.
-So a default instance can exist without ever passing a check. Reading `Value` on one throws
-rather than handing back a `null`, which keeps the invariant true at the only point where it is
-observable.
+C# cannot intercept `default(SomeStruct)` - no constructor runs for `default(T)`, array elements,
+or uninitialised fields, and `record struct` does not change that. So a default instance can exist
+without ever passing a check. Reading `Value` on one throws rather than returning `null`, which
+keeps the invariant true at the only point where it is observable.
 
 ## Requirements
 
