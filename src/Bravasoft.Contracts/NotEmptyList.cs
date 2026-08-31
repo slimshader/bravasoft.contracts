@@ -7,7 +7,7 @@ namespace Bravasoft.Contracts
     /// <summary>
     /// A <see cref="List{T}"/> that is neither <see langword="null"/> nor empty - the one-parameter
     /// convenience spelling of <c>NotEmpty&lt;List&lt;T&gt;, T&gt;</c>, in the same spirit as
-    /// <see cref="NonEmptyString"/>. Use it as a parameter type - <c>int Sum(NotEmptyList&lt;int&gt; xs)</c>
+    /// <see cref="NotEmptyString"/>. Use it as a parameter type - <c>int Sum(NotEmptyList&lt;int&gt; xs)</c>
     /// - and the call site still reads as <c>Sum(xs)</c>.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>

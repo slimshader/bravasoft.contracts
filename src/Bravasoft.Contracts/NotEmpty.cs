@@ -26,7 +26,7 @@ namespace Bravasoft.Contracts
     /// <c>using Scores = Bravasoft.Contracts.NotEmpty&lt;System.Collections.Generic.List&lt;int&gt;, int&gt;;</c>
     /// </para>
     /// <para>
-    /// This refines <see cref="NotNull{T}"/> the same way <see cref="NonEmptyString"/> does, and is
+    /// This refines <see cref="NotNull{T}"/> the same way <see cref="NotEmptyString"/> does, and is
     /// built out of one, so the null half of the contract has a single definition and widening to
     /// <c>NotNull&lt;TList&gt;</c> re-tests nothing.
     /// </para>
