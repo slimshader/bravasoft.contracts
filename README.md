@@ -1,92 +1,12 @@
 # Bravasoft.Contracts
 
-Types that move invariants into the type system, so a precondition is checked where it is
-actually broken - at the call site - rather than inside the function that was handed bad input.
+Types that move invariants into the type system - `NotEmptyString` in place of a `string` that
+every function has to check for itself.
 
-## Upholding a contract is the caller's job
-
-A precondition is a promise the *caller* makes. When it is broken, the bug is in the caller: it
-computed, loaded, or forgot to check something and then passed it on. The called function is the
-victim, not the culprit.
-
-Traditional guard clauses get this backwards. The check lives inside the callee, so that is where
-the exception is raised, and that is what the stack trace accuses:
-
-```csharp
-int Length(string s)
-{
-    if (s is null) throw new ArgumentNullException(nameof(s));   // wrong place to find out
-    return s.Length;
-}
-```
-
-```
-ArgumentNullException: Value cannot be null. (Parameter 's')
-   at Program.Traditional(String s)          <- accused, but blameless
-   at Program.BuggyCaller(Boolean traditional)
-   at Program.Main()
-```
-
-The top frame points at `Length`, a function that is behaving perfectly. The real defect is one
-frame down, and every reader of that trace has to work that out for themselves - every time.
-
-Make the contract part of the signature and the check moves to where the mistake was made. The
-implicit conversion runs in the caller's frame, before control ever reaches the callee:
-
-```csharp
-int Length(NotNull<string> s) => ((string)s).Length;            // no guard; there cannot be one
-```
-
-```
-ContractViolationException: Value of type 'System.String' must not be null.
-   at Bravasoft.Contracts.NotNull`1.ThrowNull()
-   at Bravasoft.Contracts.NotNull`1..ctor(T value)
-   at Bravasoft.Contracts.NotNull`1.op_Implicit(T value)
-   at Program.BuggyCaller(Boolean traditional)                  <- the actual bug
-   at Program.Main()
-```
-
-`Length` does not appear in that trace at all, because it was never entered. The deepest frame of
-your own code is the line that broke the promise. Nothing is left to interpret.
-
-The call site is unchanged - `Length(name)` still compiles and reads the same. What changed is
-who is accountable, and where you land in the debugger.
-
-## The contract belongs in the signature
-
-Written as a guard clause, a precondition is an implementation detail. It lives in the body, and
-the only ways to discover it are to read the source or to hit it at runtime. `int Length(string s)`
-says nothing about null; the requirement is real but invisible, so every caller either guesses,
-trusts a comment, or defensively checks again.
-
-`int Length(NotNull<string> s)` states it. IntelliSense shows it, the generated XML docs carry it,
-a decompiled reference carries it, and it shows up in the diff when it changes - because it is
-part of the type, not part of the implementation.
-
-And because it is a type, it works in the other direction too. A return type is a promise the
-*callee* makes:
-
-```csharp
-NotNull<string> LookUp(string key) => ...
-```
-
-Callers never null-check the result of `LookUp`, and no comment has to tell them not to. If the
-promise is broken, the conversion runs at the `return`, inside the callee:
-
-```
-ContractViolationException: Value of type 'System.String' must not be null.
-   at Bravasoft.Contracts.NotNull`1.ThrowNull()
-   at Bravasoft.Contracts.NotNull`1..ctor(T value)
-   at Bravasoft.Contracts.NotNull`1.op_Implicit(T value)
-   at Program.LookUp(String key)                               <- the actual bug
-   at Program.InnocentCaller()
-   at Program.Main()
-```
-
-So the party at fault lands in the deepest frame either way. Parameters are the caller's
-obligation and are checked in the caller's frame; return values are the callee's obligation and
-are checked in the callee's. In both cases the code that broke the promise is the code you are
-looking at when the debugger stops.
+Both conversions are implicit, so adopting one is a signature change and nothing else: call sites
+read exactly as before, and bodies go on using the plain type. What changes is that a broken
+promise is reported where it was broken, rather than inside the function that was handed the bad
+value.
 
 ## Only the signature changes
 
@@ -140,9 +60,104 @@ does not change either:
 var player = new Player("Ada", items);            // exactly as before
 ```
 
+The one place the conversion does not reach is member access: `name.Length` will not compile
+(`CS1061`), because C# does not consider user-defined conversions when it looks up a member.
+Assign to a `string` first, or hand the value to something that takes one - which is what code
+does with an argument anyway, and what the constructor above is doing.
+
 Storing the plain type is exactly what the guard-clause version does as well: once `_name` is a
 `string`, neither version records that anything was checked. These types are about the argument
 boundary - what a class then does with a value it has been handed is a separate question.
+
+## Upholding a contract is the caller's job
+
+A precondition is a promise the *caller* makes. When it is broken, the bug is in the caller: it
+computed, loaded, or forgot to check something and then passed it on. The called function is the
+victim, not the culprit.
+
+Traditional guard clauses get this backwards. The check lives inside the callee, so that is where
+the exception is raised, and that is what the stack trace accuses:
+
+```csharp
+static string Greet(string name)
+{
+    if (string.IsNullOrEmpty(name))                              // wrong place to find out
+        throw new ArgumentException("Name must not be empty.", nameof(name));
+
+    return Format.Greeting(name);
+}
+```
+
+```
+ArgumentException: Name must not be empty. (Parameter 'name')
+   at Traditional.Greet(String name)         <- accused, but blameless
+   at Program.BuggyCaller(Boolean traditional)
+   at Program.Main()
+```
+
+The top frame points at `Greet`, a function that is behaving perfectly. The real defect is one
+frame down, and every reader of that trace has to work that out for themselves - every time.
+
+Make the contract part of the signature and the check moves to where the mistake was made. The
+implicit conversion runs in the caller's frame, before control ever reaches the callee:
+
+```csharp
+static string Greet(NotEmptyString name) => Format.Greeting(name);   // no guard; there cannot be one
+```
+
+```
+ContractViolationException: Value of type 'System.String' must not be null.
+   at Bravasoft.Contracts.NotNull`1.ThrowNull()
+   at Bravasoft.Contracts.NotNull`1..ctor(T value)
+   at Bravasoft.Contracts.NotEmptyString..ctor(String value)
+   at Bravasoft.Contracts.NotEmptyString.op_Implicit(String value)
+   at Program.BuggyCaller(Boolean traditional)                       <- the actual bug
+   at Program.Main()
+```
+
+`Greet` does not appear in that trace at all, because it was never entered. The deepest frame of
+your own code is the line that broke the promise. Nothing is left to interpret.
+
+The call site is unchanged - `Greet(name)` still compiles and reads the same - and the body passes
+`name` straight on to `Format.Greeting(string)` with no cast and no unwrapping, because the
+conversion back is implicit too. What changed is who is accountable, and where you land in the
+debugger.
+
+## The contract belongs in the signature
+
+Written as a guard clause, a precondition is an implementation detail. It lives in the body, and
+the only ways to discover it are to read the source or to hit it at runtime.
+`string Greet(string name)` says nothing about null or emptiness; the requirement is real but
+invisible, so every caller either guesses, trusts a comment, or defensively checks again.
+
+`string Greet(NotEmptyString name)` states it. IntelliSense shows it, the generated XML docs carry it,
+a decompiled reference carries it, and it shows up in the diff when it changes - because it is
+part of the type, not part of the implementation.
+
+And because it is a type, it works in the other direction too. A return type is a promise the
+*callee* makes:
+
+```csharp
+NotNull<string> LookUp(string key) => ...
+```
+
+Callers never null-check the result of `LookUp`, and no comment has to tell them not to. If the
+promise is broken, the conversion runs at the `return`, inside the callee:
+
+```
+ContractViolationException: Value of type 'System.String' must not be null.
+   at Bravasoft.Contracts.NotNull`1.ThrowNull()
+   at Bravasoft.Contracts.NotNull`1..ctor(T value)
+   at Bravasoft.Contracts.NotNull`1.op_Implicit(T value)
+   at Program.LookUp(String key)                               <- the actual bug
+   at Program.InnocentCaller()
+   at Program.Main()
+```
+
+So the party at fault lands in the deepest frame either way. Parameters are the caller's
+obligation and are checked in the caller's frame; return values are the callee's obligation and
+are checked in the callee's. In both cases the code that broke the promise is the code you are
+looking at when the debugger stops.
 
 ## What this buys you
 
