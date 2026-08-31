@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <RootNamespace>Bravasoft.Contracts</RootNamespace>
+    <AssemblyName>Bravasoft.Contracts</AssemblyName>
+    <!-- Unity 2021.3+ / Unity 6 compile against C# 9; do not raise without checking. -->
+    <LangVersion>9.0</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package">
+    <PackageId>Bravasoft.Contracts</PackageId>
+    <Description>Types that make invariants such as non-null part of the type system. netstandard2.1, Unity friendly.</Description>
+    <PackageTags>contracts;invariants;not-null;unity;netstandard2.1</PackageTags>
+  </PropertyGroup>
+
+</Project>

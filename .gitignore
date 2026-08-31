@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+artifacts/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+
+# IDE
+.vs/
+.idea/
+.vscode/
+*.DotSettings.user
+
+# Unity (when this library is dropped into a Unity project)
+*.csproj.user

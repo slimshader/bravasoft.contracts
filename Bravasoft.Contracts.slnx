@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Bravasoft.Contracts/Bravasoft.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Bravasoft.Contracts.Tests/Bravasoft.Contracts.Tests.csproj" />
+  </Folder>
+</Solution>
