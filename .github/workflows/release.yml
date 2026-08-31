@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without the leading v (e.g. 1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CONFIGURATION: Release
+  SOLUTION: Bravasoft.Contracts.slnx
+  PROJECT: src/Bravasoft.Contracts/Bravasoft.Contracts.csproj
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          # SourceLink needs real history to resolve the commit.
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # 10.x builds the .slnx solution (8.x cannot parse it); 8.x supplies the
+          # runtime the test project targets.
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
+            version='${{ inputs.version }}'
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$version' is not a semantic version. Tag as v1.2.3 or v1.2.3-rc.1."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing $version"
+
+      - name: Restore
+        run: dotnet restore "$SOLUTION"
+
+      - name: Build
+        run: >
+          dotnet build "$SOLUTION"
+          --configuration "$CONFIGURATION"
+          --no-restore
+          -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Test
+        run: dotnet test "$SOLUTION" --configuration "$CONFIGURATION" --no-build
+
+      - name: Pack
+        run: >
+          dotnet pack "$PROJECT"
+          --configuration "$CONFIGURATION"
+          --no-build
+          -p:Version=${{ steps.version.outputs.version }}
+          --output artifacts
+
+      - name: Upload package as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-${{ steps.version.outputs.version }}
+          path: artifacts/*
+          if-no-files-found: error
+
+      - name: Push to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            echo "::error::The NUGET_API_KEY secret is not set."
+            exit 1
+          fi
+          # The matching .snupkg next to it is pushed automatically.
+          dotnet nuget push 'artifacts/*.nupkg' \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

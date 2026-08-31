@@ -18,6 +18,19 @@
     <Copyright>Copyright (c) Bravasoft</Copyright>
     <VersionPrefix>0.1.0</VersionPrefix>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/slimshader/bravasoft.contracts</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/slimshader/bravasoft.contracts</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Symbols and source">
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- SourceLink ships in the SDK; these make the package debuggable from nuget.org. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
 </Project>
