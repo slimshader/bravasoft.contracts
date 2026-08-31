@@ -155,6 +155,31 @@ boundary - what a class then does with a value it has been handed is a separate 
 - **The requirement is visible without reading the implementation**, in both directions, and it
   cannot go stale - a comment saying "must not be null" does not compile.
 
+## Why not nullable reference types, or `[NotNull]`?
+
+Nullable reference types are a compile-time analysis that is erased before anything runs. They
+produce warnings - not even build failures, unless you opt into that - and only where the
+analysis can see both sides of a call. Call from code that never opted in, and there is nothing
+to warn about: at runtime a `string` parameter and a `string?` parameter are the same parameter.
+
+In Unity that gap is the default state. Nullable reference types are off unless you turn them on,
+and there is no project setting for it - the Editor regenerates the `.csproj` files, so the
+switch has to go in a `csc.rsp` next to the code, or as `#nullable enable` at the top of every
+file. Most projects never do either. Much of what a Unity project calls into, engine API surface
+and third-party packages alike, carries no annotations at all, so even a project that does opt in
+gets no analysis at exactly the boundaries where values arrive from elsewhere.
+
+A `[NotNull]` attribute, where an analyser offers one, is erased the same way, and adds a harder
+limit: it is one check. There is no `[NotEmpty]`, no `[Positive]`, no `[InRange(1, 10)]`, and you
+cannot write them - the vocabulary belongs to whoever wrote the analyser, and it stops where they
+stopped.
+
+These types check instead of warning, so the contract holds no matter who calls, whether they
+opted into anything, or what language version they compiled against. And because a contract is a
+type rather than an attribute, adding one is ordinary code: `NotEmptyString` is a hundred lines
+in this repository, over half of them documentation - not a feature request filed against
+somebody else's analyser.
+
 ## The types
 
 | Type | Guarantees | Refines |
