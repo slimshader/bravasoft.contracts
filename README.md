@@ -88,6 +88,68 @@ obligation and are checked in the caller's frame; return values are the callee's
 are checked in the callee's. In both cases the code that broke the promise is the code you are
 looking at when the debugger stops.
 
+## Only the signature changes
+
+Constructors are where validation piles up, so they show the difference most clearly. The usual
+version, with the checks written out:
+
+```csharp
+public sealed class Player
+{
+    private readonly string _name;
+    private readonly List<Item> _inventory;
+
+    public Player(string name, List<Item> inventory)
+    {
+        if (string.IsNullOrEmpty(name))
+            throw new ArgumentException("Name must not be empty.", nameof(name));
+        if (inventory is null || inventory.Count == 0)
+            throw new ArgumentException("Inventory must not be empty.", nameof(inventory));
+
+        _name = name;
+        _inventory = inventory;
+    }
+}
+```
+
+The contracted version changes the parameter types and deletes the guards. Nothing else moves -
+the fields stay the plain types they already were:
+
+```csharp
+public sealed class Player
+{
+    private readonly string _name;                // still a plain string
+    private readonly List<Item> _inventory;       // still a plain List<Item>
+
+    public Player(NotEmptyString name, NotEmptyList<Item> inventory)
+    {
+        _name = name;                             // implicit NotEmptyString  -> string
+        _inventory = inventory;                   // implicit NotEmptyList<T> -> List<T>
+    }
+
+    public string Describe() => $"{_name} carrying {_inventory.Count}";
+}
+```
+
+No unwrapping, no `.Value`, no cast. The assignments compile because the conversion is implicit,
+which means every method, property, and field initialiser that already reads `_name` keeps
+working untouched. The contract types appear only at the boundary they guard, and the call site
+does not change either:
+
+```csharp
+var player = new Player("Ada", items);            // exactly as before
+```
+
+Storing the plain type is exactly what the guard-clause version does as well: once `_name` is a
+`string`, neither version can show a method added next year that anything was ever checked. That
+part is parity, not a cost.
+
+The difference is that only one of the two can do better. Declare the field as
+`private readonly NotEmptyString _name;` and the guarantee survives for the lifetime of the
+object - every method reading it starts from a checked value, and the field still holds one
+reference and nothing more. A guard clause has no equivalent move; its proof exists only for the
+few lines between the check and the assignment.
+
 ## What this buys you
 
 - **Blame lands on the party at fault.** The stack trace names the code with the bug, not its
