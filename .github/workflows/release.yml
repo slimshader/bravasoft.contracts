@@ -27,6 +27,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      # Lets GitHub mint the OIDC token that nuget.org exchanges for a
+      # short-lived API key. Trusted publishing does not work without it.
+      id-token: write
+
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -87,17 +93,22 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
 
+      # Trusted publishing: nuget.org trades a GitHub OIDC token for an API key
+      # that lives one hour, so this runs immediately before the push rather
+      # than earlier in the job. Requires a policy on nuget.org naming this
+      # repository owner, repository, and the workflow file "release.yml".
+      - name: Log in to NuGet
+        id: login
+        uses: NuGet/login@v1
+        with:
+          # nuget.org profile name, not an email address.
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push to NuGet
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${NUGET_API_KEY:-}" ]; then
-            echo "::error::The NUGET_API_KEY secret is not set."
-            exit 1
-          fi
           # The matching .snupkg next to it is pushed automatically.
           dotnet nuget push 'artifacts/*.nupkg' \
-            --api-key "$NUGET_API_KEY" \
+            --api-key '${{ steps.login.outputs.NUGET_API_KEY }}' \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
