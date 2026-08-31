@@ -4,10 +4,10 @@ namespace Bravasoft.Contracts.Tests;
 
 public class NotEmptyStringTests
 {
-    private static char First(NotEmptyString s) => ((string)s)[0];
+    private static char First(NotEmptyString s) => s.Value[0];
 
     // A method that only needs the weaker contract accepts the stronger one unchanged.
-    private static int Length(NotNull<string> s) => ((string)s).Length;
+    private static int Length(NotNull<string> s) => s.Value.Length;
 
     [Fact]
     public void CallSiteReadsLikeAPlainArgument()
@@ -72,5 +72,16 @@ public class NotEmptyStringTests
         NotNull<string> widened = default(NotEmptyString);
 
         Assert.Throws<ContractViolationException>(() => widened.Value);
+    }
+
+    // The casts are gone from the helpers above, so pin the implicit unwrap here.
+    [Fact]
+    public void UnwrapsImplicitlyToString()
+    {
+        NotEmptyString wrapped = "hello";
+
+        string unwrapped = wrapped;
+
+        Assert.Equal("hello", unwrapped);
     }
 }

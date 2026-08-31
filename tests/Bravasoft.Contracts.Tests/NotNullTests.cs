@@ -5,7 +5,7 @@ namespace Bravasoft.Contracts.Tests;
 public class NotNullTests
 {
     // The shape the type exists for: no precondition check in the body.
-    private static int Length(NotNull<string> s) => ((string)s).Length;
+    private static int Length(NotNull<string> s) => s.Value.Length;
 
     [Fact]
     public void CallSiteReadsLikeAPlainArgument()

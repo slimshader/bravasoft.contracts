@@ -6,9 +6,9 @@ namespace Bravasoft.Contracts.Tests;
 public class NotEmptyTests
 {
     // No guard in the body: indexing [0] is safe because the parameter type says so.
-    private static int First(Scores xs) => ((List<int>)xs)[0];
+    private static int First(Scores xs) => xs.Value[0];
 
-    private static int Count(NotNull<List<int>> xs) => ((List<int>)xs).Count;
+    private static int Count(NotNull<List<int>> xs) => xs.Value.Count;
 
     [Fact]
     public void CallSiteReadsLikeAPlainArgument()

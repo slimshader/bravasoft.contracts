@@ -62,8 +62,14 @@ var player = new Player("Ada", items);            // exactly as before
 
 The one place the conversion does not reach is member access: `name.Length` will not compile
 (`CS1061`), because C# does not consider user-defined conversions when it looks up a member.
-Assign to a `string` first, or hand the value to something that takes one - which is what code
-does with an argument anyway, and what the constructor above is doing.
+Where a body does want the value directly, reach for `.Value`:
+
+```csharp
+int length = name.Value.Length;                   // or ((string)name).Length
+```
+
+Prefer `.Value` over the cast. A cast reads as though something is being forced, which is the
+opposite of what is happening - the value has already been checked, and `.Value` simply names it.
 
 Storing the plain type is exactly what the guard-clause version does as well: once `_name` is a
 `string`, neither version records that anything was checked. These types are about the argument

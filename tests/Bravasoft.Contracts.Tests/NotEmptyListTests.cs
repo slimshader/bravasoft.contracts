@@ -4,11 +4,11 @@ namespace Bravasoft.Contracts.Tests;
 
 public class NotEmptyListTests
 {
-    private static int First(NotEmptyList<int> xs) => ((List<int>)xs)[0];
+    private static int First(NotEmptyList<int> xs) => xs.Value[0];
 
-    private static int ViaGeneralForm(NotEmpty<List<int>, int> xs) => ((List<int>)xs).Count;
+    private static int ViaGeneralForm(NotEmpty<List<int>, int> xs) => xs.Value.Count;
 
-    private static int ViaNotNull(NotNull<List<int>> xs) => ((List<int>)xs).Count;
+    private static int ViaNotNull(NotNull<List<int>> xs) => xs.Value.Count;
 
     [Fact]
     public void CallSiteReadsLikeAPlainArgument()
@@ -50,5 +50,16 @@ public class NotEmptyListTests
     public void IsTheSizeOfTheReferenceItWraps()
     {
         Assert.Equal(Unsafe.SizeOf<List<int>>(), Unsafe.SizeOf<NotEmptyList<int>>());
+    }
+
+    [Fact]
+    public void UnwrapsImplicitlyToTheList()
+    {
+        var original = new List<int> { 1 };
+        NotEmptyList<int> wrapped = original;
+
+        List<int> unwrapped = wrapped;
+
+        Assert.Same(original, unwrapped);
     }
 }

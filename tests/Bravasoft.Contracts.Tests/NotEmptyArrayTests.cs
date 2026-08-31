@@ -4,11 +4,11 @@ namespace Bravasoft.Contracts.Tests;
 
 public class NotEmptyArrayTests
 {
-    private static int First(NotEmptyArray<int> xs) => ((int[])xs)[0];
+    private static int First(NotEmptyArray<int> xs) => xs.Value[0];
 
-    private static int ViaGeneralForm(NotEmpty<int[], int> xs) => ((int[])xs).Length;
+    private static int ViaGeneralForm(NotEmpty<int[], int> xs) => xs.Value.Length;
 
-    private static int ViaNotNull(NotNull<int[]> xs) => ((int[])xs).Length;
+    private static int ViaNotNull(NotNull<int[]> xs) => xs.Value.Length;
 
     [Fact]
     public void CallSiteReadsLikeAPlainArgument()
@@ -58,5 +58,16 @@ public class NotEmptyArrayTests
         NotEmptyArray<string> xs = new[] { "a", "b" };
 
         Assert.Equal("a", xs.Value[0]);
+    }
+
+    [Fact]
+    public void UnwrapsImplicitlyToTheArray()
+    {
+        var original = new[] { 1, 2 };
+        NotEmptyArray<int> wrapped = original;
+
+        int[] unwrapped = wrapped;
+
+        Assert.Same(original, unwrapped);
     }
 }
