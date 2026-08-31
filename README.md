@@ -141,14 +141,8 @@ var player = new Player("Ada", items);            // exactly as before
 ```
 
 Storing the plain type is exactly what the guard-clause version does as well: once `_name` is a
-`string`, neither version can show a method added next year that anything was ever checked. That
-part is parity, not a cost.
-
-The difference is that only one of the two can do better. Declare the field as
-`private readonly NotEmptyString _name;` and the guarantee survives for the lifetime of the
-object - every method reading it starts from a checked value, and the field still holds one
-reference and nothing more. A guard clause has no equivalent move; its proof exists only for the
-few lines between the check and the assignment.
+`string`, neither version records that anything was checked. These types are about the argument
+boundary - what a class then does with a value it has been handed is a separate question.
 
 ## What this buys you
 
