@@ -6,7 +6,27 @@ signature change and nothing else.
 
 ## Only the signature changes
 
-The usual constructor, with the checks written out:
+Start with the weakest contract. A method that needs a non-null argument:
+
+```csharp
+void Rename(string name)
+{
+    if (name is null) throw new ArgumentNullException(nameof(name));
+    _name = name;
+}
+```
+
+becomes:
+
+```csharp
+void Rename(NotNull<string> name) => _name = name;   // implicit NotNull<string> -> string
+```
+
+The guard is gone, `_name` is still a plain `string`, and `Rename(name)` still reads the same at
+the call site.
+
+Stronger contracts work exactly the same way. The usual constructor, with the checks written
+out:
 
 ```csharp
 public Player(string name, List<Item> inventory)

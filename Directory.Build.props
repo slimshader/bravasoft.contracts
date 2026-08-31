@@ -16,7 +16,7 @@
     <Company>Bravasoft</Company>
     <Product>Bravasoft.Contracts</Product>
     <Copyright>Copyright (c) Bravasoft</Copyright>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.1.1</VersionPrefix>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/slimshader/bravasoft.contracts</PackageProjectUrl>
     <RepositoryUrl>https://github.com/slimshader/bravasoft.contracts</RepositoryUrl>
